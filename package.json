@@ -15,7 +15,6 @@
     "preview:": true
   },
   "license": "MIT",
-  "scripts": {},
   "keywords": [
     "chatbot",
     "koishi",
