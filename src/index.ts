@@ -1,17 +1,8 @@
-import { Context, Schema } from 'koishi'
+import { Context, Schema, h } from 'koishi'
 import { resolve } from 'path'
-import { readFileSync } from 'fs'
-import * as yaml from 'yaml'
-
-// 配置文件接口
-interface KoishiConfig {
-  plugins: {
-    [key: string]: {
-      levelSet?: LevelInfo[]
-      [key: string]: any
-    }
-  }
-}
+import { promises as fsAsync } from 'fs'
+import type { } from 'koishi-plugin-puppeteer'
+import * as jrysFix from 'koishi-plugin-jrys-fix'
 
 // 声明数据库表结构
 declare module 'koishi' {
@@ -56,6 +47,30 @@ const DEFAULT_LEVEL: LevelInfo = {
   levelExp: 0,
   levelName: '无等级',
   levelColor: '#666666'
+}
+
+const TEMPLATE_CANDIDATES = [
+  resolve(process.cwd(), 'src', 'templates', 'rank-card.html'),
+  resolve(process.cwd(), 'lib', 'templates', 'rank-card.html'),
+  resolve(process.cwd(), 'dist', 'templates', 'rank-card.html'),
+  resolve(process.cwd(), 'external', 'jrys-fix-ranks', 'src', 'templates', 'rank-card.html'),
+  resolve(process.cwd(), 'external', 'jrys-fix-ranks', 'lib', 'templates', 'rank-card.html'),
+  resolve(process.cwd(), 'external', 'jrys-fix-ranks', 'dist', 'templates', 'rank-card.html'),
+  resolve(process.cwd(), 'node_modules', 'koishi-plugin-jrys-fix-ranks', 'lib', 'templates', 'rank-card.html'),
+  resolve(process.cwd(), 'node_modules', 'koishi-plugin-jrys-fix-ranks', 'dist', 'templates', 'rank-card.html'),
+]
+
+async function resolveTemplatePath() {
+  for (const candidate of TEMPLATE_CANDIDATES) {
+    try {
+      await fsAsync.access(candidate)
+      return candidate
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error('未找到 rank-card.html 模板文件')
 }
 
 function getLevelInfo(exp: number, levels: LevelInfo[]): LevelInfo {
@@ -146,10 +161,18 @@ async function getUserDisplayInfo(ctx: Context, jrysUserId: string, channelIdent
 
 export const name = 'jrys-fix-ranks'
 
+export const inject = {
+  required: ['database'],
+  optional: ['puppeteer']
+}
+
 export interface Config {
   limit: number
   expCommand: string
   signCommand: string
+  imageMode: boolean
+  syncLevelSet: boolean
+  levelSet: LevelInfo[]
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -164,6 +187,9 @@ export const Config: Schema<Config> = Schema.object({
   signCommand: Schema.string()
     .description('签到天数排行榜命令')
     .default('jrysranksign'),
+  imageMode: Schema.boolean()
+    .description('是否使用图片模式渲染排行榜（需要 puppeteer 服务）')
+    .default(true),
   next_ExpDisplay: Schema.boolean()
     .description('是否在排行榜中显示升级所需经验')
     .default(true),
@@ -172,257 +198,284 @@ export const Config: Schema<Config> = Schema.object({
     .default(true),
   borderwidth: Schema.number()
     .description('边框宽度（一般最佳宽度为14）')
-    .default(14)
+    .default(14),
+  syncLevelSet: Schema.boolean()
+    .description('自动从 jrys-fix 插件同步等级配置（启用后将忽略下方 levelSet）')
+    .default(true),
+  levelSet: Schema.array(Schema.object({
+    level: Schema.number().description('等级'),
+    levelExp: Schema.number().description('等级最低经验'),
+    levelName: Schema.string().description('等级名称'),
+    levelColor: Schema.string().description('等级颜色'),
+  })).description('等级配置列表（与 jrys-fix 中的 levelSet 保持一致）').default([]),
 })
 
 export function apply(ctx: Context) {
-  let levelConfig = []
   const logger = ctx.logger('jrys-fix-ranks')
 
-  try {
-    // 获取 koishi.yml 的路径
-    const configPath = resolve(__dirname, '../../../koishi.yml')
-    logger.debug('尝试读取配置文件:', configPath)
+  // 获取等级配置：优先从 jrys-fix 插件实例同步，回退到本地配置
+  function getLevelConfig(): LevelInfo[] {
+    if (ctx.config.syncLevelSet) {
+      const scope = ctx.registry.get(jrysFix)
+      const synced: LevelInfo[] = scope?.config?.levelSet
+      if (synced?.length > 0) return synced
+      logger.warn('syncLevelSet 已启用，但未能从 jrys-fix 读取到等级配置，回退到本地 levelSet')
+    }
+    return ctx.config.levelSet || []
+  }
 
-    // 读取并解析 YAML 文件
-    const yamlContent = readFileSync(configPath, 'utf8')
-    const config = yaml.parse(yamlContent) as KoishiConfig
+  // 检查是否可以使用图片模式
+  function canUseImageMode(): boolean {
+    return ctx.config.imageMode && !!ctx.puppeteer
+  }
 
-    // 查找 jrys-fix 插件的配置
-    const plugins = config.plugins || {}
-    for (const [key, value] of Object.entries(plugins)) {
-      if (key.startsWith('jrys-fix:') || key === 'jrys-fix') {
-        const pluginConfig = value as { levelSet?: LevelInfo[] }
-        if (pluginConfig?.levelSet?.length > 0) {
-          levelConfig = pluginConfig.levelSet
-          logger.success(`从 ${key} 成功加载 ${levelConfig.length} 个等级配置`)
-          logger.debug('等级配置详情:', levelConfig)
-          break
+  // 获取排行用户列表（公共逻辑）
+  async function getRankedUsers(session: any, sortField: 'exp' | 'signCount') {
+    const usernameDbExists = await checkUsernameDatabaseExists(ctx)
+
+    const allUsers = await ctx.database.get('jrys', {}, {
+      sort: { [sortField]: 'desc' }
+    })
+
+    if (!allUsers.length) return null
+
+    let users = []
+
+    if (usernameDbExists) {
+      const channelIdentifier = getChannelIdentifier(session.platform, session.channelId)
+
+      const channelUsers = []
+      for (const user of allUsers) {
+        const displayInfo = await getUserDisplayInfo(ctx, user.name, channelIdentifier)
+        if (displayInfo.displayName !== user.name) {
+          channelUsers.push({
+            ...user,
+            displayName: displayInfo.displayName,
+            username: displayInfo.username,
+            nickname: displayInfo.nickname
+          })
         }
       }
+
+      users = channelUsers.slice(0, ctx.config.limit)
+
+      if (!users.length) return []
+    } else {
+      users = allUsers.slice(0, ctx.config.limit).map(user => ({
+        ...user,
+        displayName: user.name
+      }))
     }
 
-    if (levelConfig.length === 0) {
-      logger.warn('在 koishi.yml 中未找到有效的等级配置')
+    return users
+  }
+
+  // 为用户构建等级相关数据
+  function buildUserLevelData(user: any) {
+    const levelConfig = getLevelConfig()
+    if (levelConfig.length === 0) return {}
+
+    const sortedLevels = [...levelConfig].sort((a, b) => a.levelExp - b.levelExp)
+    const currentLevel = getLevelInfo(user.exp, levelConfig)
+    const currentIndex = sortedLevels.findIndex(l => l.levelExp === currentLevel.levelExp)
+    const prevLevel = sortedLevels[currentIndex - 1]
+    const nextLevel = sortedLevels[currentIndex + 1]
+
+    let levelProgression = ''
+    if (ctx.config.pre_next_LevelDisplay) {
+      if (prevLevel) levelProgression += `${prevLevel.levelName} → `
+      levelProgression += `「${currentLevel.levelName}」`
+      if (nextLevel) levelProgression += ` → ${nextLevel.levelName}`
     }
-  } catch (error) {
-    logger.error('读取配置文件失败:', error)
+
+    return {
+      levelName: currentLevel.levelName,
+      levelColor: currentLevel.levelColor,
+      currentLevelExp: currentLevel.levelExp,
+      nextLevelExp: nextLevel?.levelExp ?? null,
+      levelProgression: levelProgression || null,
+    }
+  }
+
+  // 渲染排行榜图片
+  async function renderRankImage(type: 'exp' | 'sign', users: any[], totalUsers: number) {
+    try {
+      const templatePath = await resolveTemplatePath()
+      let template = await fsAsync.readFile(templatePath, 'utf-8')
+
+      const data = {
+        type,
+        limit: ctx.config.limit,
+        channelName: '当前频道',
+        totalUsers,
+        updateTime: new Date().toLocaleString('zh-CN'),
+        users: users.map(user => {
+          const levelData = buildUserLevelData(user)
+          return {
+            displayName: user.displayName,
+            originalId: user.name,
+            username: user.username || null,
+            nickname: user.nickname || null,
+            value: type === 'exp' ? user.exp : user.signCount,
+            ...levelData,
+          }
+        }),
+      }
+
+      template = template.replace('{{DATA}}', JSON.stringify(data))
+
+      const page = await ctx.puppeteer.page()
+      try {
+        await page.setContent(template)
+        const element = await page.$('.card')
+        if (!element) throw new Error('找不到 .card 元素')
+        const imgBuf = await element.screenshot({ encoding: 'binary' })
+        return h.image(imgBuf, 'image/png')
+      } finally {
+        await page.close()
+      }
+    } catch (err) {
+      logger.error('renderRankImage 失败:', err)
+      return null
+    }
+  }
+
+  // 文本模式渲染经验排行
+  function renderExpText(users: any[]) {
+    const levelConfig = getLevelConfig()
+    const divider = '┏' + '—'.repeat(ctx.config.borderwidth) + '┓'
+    const midDivider = '┣' + '—'.repeat(ctx.config.borderwidth) + '┫'
+    const endDivider = '┗' + '—'.repeat(ctx.config.borderwidth) + '┛'
+
+    const header = [
+      divider,
+      `┃  ${users.length ? '🏆' : '📊'} 赛季经验排行榜 TOP.${ctx.config.limit} `,
+      midDivider
+    ].join('\n')
+
+    const rankings = users.map((user, index) => {
+      const position = (index + 1).toString()
+      const medal = index < 3 ? ['👑', '⭐', '✧'][index] : '•'
+      const expStr = user.exp.toLocaleString()
+      let rankText = []
+      let nameLine = `┃ ${medal} ${position}. ${user.displayName}`
+      if (user.nickname && user.username && user.displayName === user.nickname) {
+        nameLine += `（${user.username}）`
+      } else if (user.displayName !== user.name) {
+        nameLine += `（${user.name}）`
+      }
+      rankText.push(nameLine)
+      if (levelConfig.length > 0) {
+        const sortedLevels = [...levelConfig].sort((a, b) => a.levelExp - b.levelExp)
+        const currentLevel = getLevelInfo(user.exp, levelConfig)
+        const currentIndex = sortedLevels.findIndex(l => l.levelExp === currentLevel.levelExp)
+        const prevLevel = sortedLevels[currentIndex - 1]?.levelName
+        const nextLevel = sortedLevels[currentIndex + 1]?.levelName
+        let levelLine = `┃  ✨`
+        if (ctx.config.next_ExpDisplay) {
+          if (sortedLevels[currentIndex + 1]) {
+            const nextExp = sortedLevels[currentIndex + 1].levelExp
+            rankText.push(`┃  ⚡${expStr} exp (下一级:${nextExp} exp)`)
+          } else {
+            rankText.push(`┃  ⚡${expStr} (Max)`)
+          }
+        } else {
+          rankText.push(`┃  ⚡${expStr} exp`)
+        }
+        if (ctx.config.pre_next_LevelDisplay) {
+          if (prevLevel) levelLine += `${prevLevel} ->`
+          levelLine += `「${currentLevel.levelName}」`
+          if (nextLevel) levelLine += `-> ${nextLevel}`
+        } else {
+          levelLine += `${currentLevel.levelName}`
+        }
+        rankText.push(levelLine)
+      }
+      else {
+        rankText.push(`┃  ⚡${expStr} exp`)
+      }
+      return rankText.join('\n')
+    }).join('\n\n')
+
+    return [header, rankings, endDivider].join('\n')
+  }
+
+  // 文本模式渲染签到排行
+  function renderSignText(users: any[]) {
+    const levelConfig = getLevelConfig()
+    const divider = '┏' + '—'.repeat(ctx.config.borderwidth) + '┓'
+    const midDivider = '┣' + '—'.repeat(ctx.config.borderwidth) + '┫'
+    const endDivider = '┗' + '—'.repeat(ctx.config.borderwidth) + '┛'
+
+    const header = [
+      divider,
+      `┃  ${users.length ? '🏆' : '📊'} 累计签到排行榜 TOP.${ctx.config.limit} `,
+      midDivider
+    ].join('\n')
+
+    const rankings = users.map((user, index) => {
+      const position = (index + 1).toString()
+      const medal = index < 3 ? ['👑', '⭐', '✧'][index] : '•'
+      const signStr = user.signCount.toLocaleString()
+      let rankText = []
+      let nameLine = `┃ ${medal} ${position}. ${user.displayName}`
+      if (user.nickname && user.username && user.displayName === user.nickname) {
+        nameLine += `（${user.username}）`
+      } else if (user.displayName !== user.name) {
+        nameLine += `（${user.name}）`
+      }
+      rankText.push(nameLine)
+      rankText.push(`┃  📅${signStr} 天`)
+      if (levelConfig.length > 0) {
+        const sortedLevels = [...levelConfig].sort((a, b) => a.levelExp - b.levelExp)
+        const currentLevel = getLevelInfo(user.exp, levelConfig)
+        const currentIndex = sortedLevels.findIndex(l => l.levelExp === currentLevel.levelExp)
+        const prevLevel = sortedLevels[currentIndex - 1]?.levelName
+        const nextLevel = sortedLevels[currentIndex + 1]?.levelName
+        let levelLine = `┃  ✨`
+        if (ctx.config.pre_next_LevelDisplay) {
+          if (prevLevel) levelLine += `${prevLevel} ->`
+          levelLine += `「${currentLevel.levelName}」`
+          if (nextLevel) levelLine += `-> ${nextLevel}`
+        } else {
+          levelLine += `${currentLevel.levelName}`
+        }
+        rankText.push(levelLine)
+      }
+      return rankText.join('\n')
+    }).join('\n\n')
+
+    return [header, rankings, endDivider].join('\n')
   }
 
   // 经验值排行榜命令
   ctx.command(ctx.config.expCommand)
     .action(async ({ session }) => {
-      // 检查username数据库是否存在
-      const usernameDbExists = await checkUsernameDatabaseExists(ctx)
+      const users = await getRankedUsers(session, 'exp')
+      if (users === null) return '暂无数据'
+      if (users.length === 0) return '当前频道暂无数据'
 
-      // 获取所有jrys用户
-      const allUsers = await ctx.database.get('jrys', {}, {
-        sort: { exp: 'desc' }
-      })
-
-      if (!allUsers.length) return '暂无数据'
-
-      let users = []
-
-      if (usernameDbExists) {
-        // 如果username数据库存在，进行频道筛选
-        const channelIdentifier = getChannelIdentifier(session.platform, session.channelId)
-
-        // 筛选当前频道的用户并获取显示名称
-        const channelUsers = []
-        for (const user of allUsers) {
-          const displayInfo = await getUserDisplayInfo(ctx, user.name, channelIdentifier)
-          // 如果显示名称不是原始ID，说明找到了该频道的用户
-          if (displayInfo.displayName !== user.name) {
-            channelUsers.push({
-              ...user,
-              displayName: displayInfo.displayName,
-              username: displayInfo.username,
-              nickname: displayInfo.nickname
-            })
-          }
-        }
-
-        users = channelUsers.slice(0, ctx.config.limit)
-
-        if (!users.length) return '当前频道暂无数据'
-      } else {
-        // 如果username数据库不存在，直接使用原始数据
-        users = allUsers.slice(0, ctx.config.limit).map(user => ({
-          ...user,
-          displayName: user.name
-        }))
+      if (canUseImageMode()) {
+        const totalCount = (await ctx.database.get('jrys', {})).length
+        const img = await renderRankImage('exp', users, totalCount)
+        if (img) return img
       }
 
-      const divider = '┏' + '—'.repeat(ctx.config.borderwidth) + '┓'
-      const midDivider = '┣' + '—'.repeat(ctx.config.borderwidth) + '┫'
-      const endDivider = '┗' + '—'.repeat(ctx.config.borderwidth) + '┛'
-
-      const header = [
-        divider,
-        `┃  ${users.length ? '🏆' : '📊'} 赛季经验排行榜 TOP.${ctx.config.limit} `,
-        midDivider
-      ].join('\n')
-
-      const rankings = users.map((user, index) => {
-        const position = (index + 1).toString()
-        const medal = index < 3 ? ['👑', '⭐', '✧'][index] : '•'
-        const expStr = user.exp.toLocaleString()
-        let rankText = []
-        // 基本信息和用户名
-        let nameLine = `┃ ${medal} ${position}. ${user.displayName}`
-        if (user.nickname && user.username && user.displayName === user.nickname) {
-          // 如果有昵称，显示昵称（用户名）
-          nameLine += `（${user.username}）`
-        } else if (user.displayName !== user.name) {
-          // 如果没有昵称但有用户名，显示用户名（原始ID）
-          nameLine += `（${user.name}）`
-        }
-        rankText.push(nameLine)
-        // 等级信息（如果有配置）
-        if (levelConfig.length > 0) {
-          const sortedLevels = [...levelConfig].sort((a, b) => a.levelExp - b.levelExp)
-          const currentLevel = getLevelInfo(user.exp, levelConfig)
-          const currentIndex = sortedLevels.findIndex(l => l.levelExp === currentLevel.levelExp)
-          const prevLevel = sortedLevels[currentIndex - 1]?.levelName
-          const nextLevel = sortedLevels[currentIndex + 1]?.levelName
-          let levelLine = `┃  ✨`
-          // 有等级的经验值信息
-          if (ctx.config.next_ExpDisplay) { // 如果配置开启显示升级所需经验
-            if (sortedLevels[currentIndex + 1]) {
-              const nextExp = sortedLevels[currentIndex + 1].levelExp
-              rankText.push(`┃  ⚡${expStr} exp (下一级:${nextExp} exp)`)
-            } else {
-              rankText.push(`┃  ⚡${expStr} (Max)`)
-            }
-          } else {
-            rankText.push(`┃  ⚡${expStr} exp`)
-          }
-          // 等级信息
-          if (ctx.config.pre_next_LevelDisplay) { // 如果配置开启显示前后等级
-            if (prevLevel) levelLine += `${prevLevel} ->`
-            levelLine += `「${currentLevel.levelName}」`
-            if (nextLevel) levelLine += `-> ${nextLevel}`
-          } else {
-            levelLine += `${currentLevel.levelName}`
-          }
-          rankText.push(levelLine)
-        }
-        else {
-          // 经验值信息
-          rankText.push(`┃  ⚡${expStr} exp`)
-        }
-        return rankText.join('\n')
-      }).join('\n\n')
-
-      const output = [
-        header,
-        rankings,
-        endDivider
-      ].join('\n')
-
-      return output
+      return renderExpText(users)
     })
 
   // 签到天数排行榜命令
   ctx.command(ctx.config.signCommand)
     .action(async ({ session }) => {
-      // 检查username数据库是否存在
-      const usernameDbExists = await checkUsernameDatabaseExists(ctx)
+      const users = await getRankedUsers(session, 'signCount')
+      if (users === null) return '暂无数据'
+      if (users.length === 0) return '当前频道暂无数据'
 
-      // 获取所有jrys用户
-      const allUsers = await ctx.database.get('jrys', {}, {
-        sort: { signCount: 'desc' }
-      })
-
-      if (!allUsers.length) return '暂无数据'
-
-      let users = []
-
-      if (usernameDbExists) {
-        // 如果username数据库存在，进行频道筛选
-        const channelIdentifier = getChannelIdentifier(session.platform, session.channelId)
-
-        // 筛选当前频道的用户并获取显示名称
-        const channelUsers = []
-        for (const user of allUsers) {
-          const displayInfo = await getUserDisplayInfo(ctx, user.name, channelIdentifier)
-          // 如果显示名称不是原始ID，说明找到了该频道的用户
-          if (displayInfo.displayName !== user.name) {
-            channelUsers.push({
-              ...user,
-              displayName: displayInfo.displayName,
-              username: displayInfo.username,
-              nickname: displayInfo.nickname
-            })
-          }
-        }
-
-        users = channelUsers.slice(0, ctx.config.limit)
-
-        if (!users.length) return '当前频道暂无数据'
-      } else {
-        // 如果username数据库不存在，直接使用原始数据
-        users = allUsers.slice(0, ctx.config.limit).map(user => ({
-          ...user,
-          displayName: user.name
-        }))
+      if (canUseImageMode()) {
+        const img = await renderRankImage('sign', users, (await ctx.database.get('jrys', {})).length)
+        if (img) return img
       }
 
-      const divider = '┏' + '—'.repeat(ctx.config.borderwidth) + '┓'
-      const midDivider = '┣' + '—'.repeat(ctx.config.borderwidth) + '┫'
-      const endDivider = '┗' + '—'.repeat(ctx.config.borderwidth) + '┛'
-
-      const header = [
-        divider,
-        `┃  ${users.length ? '🏆' : '�'} 累计签到排行榜 TOP.${ctx.config.limit} `,
-        midDivider
-      ].join('\n')
-
-      const rankings = users.map((user, index) => {
-        const position = (index + 1).toString()
-        const medal = index < 3 ? ['👑', '⭐', '✧'][index] : '•'
-        const signStr = user.signCount.toLocaleString()
-        let rankText = []
-        // 基本信息和用户名
-        let nameLine = `┃ ${medal} ${position}. ${user.displayName}`
-        if (user.nickname && user.username && user.displayName === user.nickname) {
-          // 如果有昵称，显示昵称（用户名）
-          nameLine += `（${user.username}）`
-        } else if (user.displayName !== user.name) {
-          // 如果没有昵称但有用户名，显示用户名（原始ID）
-          nameLine += `（${user.name}）`
-        }
-        rankText.push(nameLine)
-        // 签到天数信息
-        rankText.push(`┃  📅${signStr} 天`)
-        // 等级信息（如果有配置）
-        if (levelConfig.length > 0) {
-          const sortedLevels = [...levelConfig].sort((a, b) => a.levelExp - b.levelExp)
-          const currentLevel = getLevelInfo(user.exp, levelConfig)
-          const currentIndex = sortedLevels.findIndex(l => l.levelExp === currentLevel.levelExp)
-          const prevLevel = sortedLevels[currentIndex - 1]?.levelName
-          const nextLevel = sortedLevels[currentIndex + 1]?.levelName
-          let levelLine = `┃  ✨`
-          // 等级信息
-          if (ctx.config.pre_next_LevelDisplay) { // 如果配置开启显示前后等级
-            if (prevLevel) levelLine += `${prevLevel} ->`
-            levelLine += `「${currentLevel.levelName}」`
-            if (nextLevel) levelLine += `-> ${nextLevel}`
-          } else {
-            levelLine += `${currentLevel.levelName}`
-          }
-          rankText.push(levelLine)
-        }
-        return rankText.join('\n')
-      }).join('\n\n')
-
-      const output = [
-        header,
-        rankings,
-        endDivider
-      ].join('\n')
-
-      return output
+      return renderSignText(users)
     })
 }

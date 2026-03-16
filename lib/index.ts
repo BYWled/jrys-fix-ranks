@@ -32,19 +32,42 @@ var src_exports = {};
 __export(src_exports, {
   Config: () => Config,
   apply: () => apply,
+  inject: () => inject,
   name: () => name
 });
 module.exports = __toCommonJS(src_exports);
 var import_koishi = require("koishi");
 var import_path = require("path");
 var import_fs = require("fs");
-var yaml = __toESM(require("yaml"));
+var jrysFix = __toESM(require("koishi-plugin-jrys-fix"));
 var DEFAULT_LEVEL = {
   level: 0,
   levelExp: 0,
   levelName: "无等级",
   levelColor: "#666666"
 };
+var TEMPLATE_CANDIDATES = [
+  (0, import_path.resolve)(process.cwd(), "src", "templates", "rank-card.html"),
+  (0, import_path.resolve)(process.cwd(), "lib", "templates", "rank-card.html"),
+  (0, import_path.resolve)(process.cwd(), "dist", "templates", "rank-card.html"),
+  (0, import_path.resolve)(process.cwd(), "external", "jrys-fix-ranks", "src", "templates", "rank-card.html"),
+  (0, import_path.resolve)(process.cwd(), "external", "jrys-fix-ranks", "lib", "templates", "rank-card.html"),
+  (0, import_path.resolve)(process.cwd(), "external", "jrys-fix-ranks", "dist", "templates", "rank-card.html"),
+  (0, import_path.resolve)(process.cwd(), "node_modules", "koishi-plugin-jrys-fix-ranks", "lib", "templates", "rank-card.html"),
+  (0, import_path.resolve)(process.cwd(), "node_modules", "koishi-plugin-jrys-fix-ranks", "dist", "templates", "rank-card.html")
+];
+async function resolveTemplatePath() {
+  for (const candidate of TEMPLATE_CANDIDATES) {
+    try {
+      await import_fs.promises.access(candidate);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("未找到 rank-card.html 模板文件");
+}
+__name(resolveTemplatePath, "resolveTemplatePath");
 function getLevelInfo(exp, levels) {
   if (!levels?.length) return DEFAULT_LEVEL;
   const sortedLevels = [...levels].sort((a, b) => b.levelExp - a.levelExp);
@@ -104,46 +127,48 @@ async function getUserDisplayInfo(ctx, jrysUserId, channelIdentifier) {
 }
 __name(getUserDisplayInfo, "getUserDisplayInfo");
 var name = "jrys-fix-ranks";
+var inject = {
+  required: ["database"],
+  optional: ["puppeteer"]
+};
 var Config = import_koishi.Schema.object({
   limit: import_koishi.Schema.number().description("排行榜显示的最大条目数").default(10).min(1).max(100),
   expCommand: import_koishi.Schema.string().description("经验排行榜命令").default("jrysranks"),
   signCommand: import_koishi.Schema.string().description("签到天数排行榜命令").default("jrysranksign"),
+  imageMode: import_koishi.Schema.boolean().description("是否使用图片模式渲染排行榜（需要 puppeteer 服务）").default(true),
   next_ExpDisplay: import_koishi.Schema.boolean().description("是否在排行榜中显示升级所需经验").default(true),
   pre_next_LevelDisplay: import_koishi.Schema.boolean().description("是否在排行榜中显示前后等级信息").default(true),
-  borderwidth: import_koishi.Schema.number().description("边框宽度（一般最佳宽度为14）").default(14)
+  borderwidth: import_koishi.Schema.number().description("边框宽度（一般最佳宽度为14）").default(14),
+  syncLevelSet: import_koishi.Schema.boolean().description("自动从 jrys-fix 插件同步等级配置（启用后将忽略下方 levelSet）").default(true),
+  levelSet: import_koishi.Schema.array(import_koishi.Schema.object({
+    level: import_koishi.Schema.number().description("等级"),
+    levelExp: import_koishi.Schema.number().description("等级最低经验"),
+    levelName: import_koishi.Schema.string().description("等级名称"),
+    levelColor: import_koishi.Schema.string().description("等级颜色")
+  })).description("等级配置列表（与 jrys-fix 中的 levelSet 保持一致）").default([])
 });
 function apply(ctx) {
-  let levelConfig = [];
   const logger = ctx.logger("jrys-fix-ranks");
-  try {
-    const configPath = (0, import_path.resolve)(__dirname, "../../../koishi.yml");
-    logger.debug("尝试读取配置文件:", configPath);
-    const yamlContent = (0, import_fs.readFileSync)(configPath, "utf8");
-    const config = yaml.parse(yamlContent);
-    const plugins = config.plugins || {};
-    for (const [key, value] of Object.entries(plugins)) {
-      if (key.startsWith("jrys-fix:") || key === "jrys-fix") {
-        const pluginConfig = value;
-        if (pluginConfig?.levelSet?.length > 0) {
-          levelConfig = pluginConfig.levelSet;
-          logger.success(`从 ${key} 成功加载 ${levelConfig.length} 个等级配置`);
-          logger.debug("等级配置详情:", levelConfig);
-          break;
-        }
-      }
+  function getLevelConfig() {
+    if (ctx.config.syncLevelSet) {
+      const scope = ctx.registry.get(jrysFix);
+      const synced = scope?.config?.levelSet;
+      if (synced?.length > 0) return synced;
+      logger.warn("syncLevelSet 已启用，但未能从 jrys-fix 读取到等级配置，回退到本地 levelSet");
     }
-    if (levelConfig.length === 0) {
-      logger.warn("在 koishi.yml 中未找到有效的等级配置");
-    }
-  } catch (error) {
-    logger.error("读取配置文件失败:", error);
+    return ctx.config.levelSet || [];
   }
-  ctx.command(ctx.config.expCommand).action(async ({ session }) => {
+  __name(getLevelConfig, "getLevelConfig");
+  function canUseImageMode() {
+    return ctx.config.imageMode && !!ctx.puppeteer;
+  }
+  __name(canUseImageMode, "canUseImageMode");
+  async function getRankedUsers(session, sortField) {
     const usernameDbExists = await checkUsernameDatabaseExists(ctx);
     const allUsers = await ctx.database.get("jrys", {}, {
-      sort: { exp: "desc" }
+      sort: { [sortField]: "desc" }
     });
-    if (!allUsers.length) return "暂无数据";
+    if (!allUsers.length) return null;
     let users = [];
     if (usernameDbExists) {
       const channelIdentifier = getChannelIdentifier(session.platform, session.channelId);
@@ -160,13 +185,80 @@ function apply(ctx) {
         }
       }
       users = channelUsers.slice(0, ctx.config.limit);
-      if (!users.length) return "当前频道暂无数据";
+      if (!users.length) return [];
     } else {
       users = allUsers.slice(0, ctx.config.limit).map((user) => ({
         ...user,
         displayName: user.name
       }));
     }
+    return users;
+  }
+  __name(getRankedUsers, "getRankedUsers");
+  function buildUserLevelData(user) {
+    const levelConfig = getLevelConfig();
+    if (levelConfig.length === 0) return {};
+    const sortedLevels = [...levelConfig].sort((a, b) => a.levelExp - b.levelExp);
+    const currentLevel = getLevelInfo(user.exp, levelConfig);
+    const currentIndex = sortedLevels.findIndex((l) => l.levelExp === currentLevel.levelExp);
+    const prevLevel = sortedLevels[currentIndex - 1];
+    const nextLevel = sortedLevels[currentIndex + 1];
+    let levelProgression = "";
+    if (ctx.config.pre_next_LevelDisplay) {
+      if (prevLevel) levelProgression += `${prevLevel.levelName} → `;
+      levelProgression += `「${currentLevel.levelName}」`;
+      if (nextLevel) levelProgression += ` → ${nextLevel.levelName}`;
+    }
+    return {
+      levelName: currentLevel.levelName,
+      levelColor: currentLevel.levelColor,
+      currentLevelExp: currentLevel.levelExp,
+      nextLevelExp: nextLevel?.levelExp ?? null,
+      levelProgression: levelProgression || null
+    };
+  }
+  __name(buildUserLevelData, "buildUserLevelData");
+  async function renderRankImage(type, users, totalUsers) {
+    try {
+      const templatePath = await resolveTemplatePath();
+      let template = await import_fs.promises.readFile(templatePath, "utf-8");
+      const data = {
+        type,
+        limit: ctx.config.limit,
+        channelName: "当前频道",
+        totalUsers,
+        updateTime: (/* @__PURE__ */ new Date()).toLocaleString("zh-CN"),
+        users: users.map((user) => {
+          const levelData = buildUserLevelData(user);
+          return {
+            displayName: user.displayName,
+            originalId: user.name,
+            username: user.username || null,
+            nickname: user.nickname || null,
+            value: type === "exp" ? user.exp : user.signCount,
+            ...levelData
+          };
+        })
+      };
+      template = template.replace("{{DATA}}", JSON.stringify(data));
+      const page = await ctx.puppeteer.page();
+      try {
+        await page.setContent(template);
+        const element = await page.$(".card");
+        if (!element) throw new Error("找不到 .card 元素");
+        const imgBuf = await element.screenshot({ encoding: "binary" });
+        return import_koishi.h.image(imgBuf, "image/png");
+      } finally {
+        await page.close();
+      }
+    } catch (err) {
+      logger.error("renderRankImage 失败:", err);
+      return null;
+    }
+  }
+  __name(renderRankImage, "renderRankImage");
+  function renderExpText(users) {
+    const levelConfig = getLevelConfig();
     const divider = "┏" + "—".repeat(ctx.config.borderwidth) + "┓";
     const midDivider = "┣" + "—".repeat(ctx.config.borderwidth) + "┫";
     const endDivider = "┗" + "—".repeat(ctx.config.borderwidth) + "┛";
@@ -217,48 +309,17 @@ function apply(ctx) {
       }
       return rankText.join("\n");
     }).join("\n\n");
-    const output = [
-      header,
-      rankings,
-      endDivider
-    ].join("\n");
-    return output;
-  });
-  ctx.command(ctx.config.signCommand).action(async ({ session }) => {
-    const usernameDbExists = await checkUsernameDatabaseExists(ctx);
-    const allUsers = await ctx.database.get("jrys", {}, {
-      sort: { signCount: "desc" }
-    });
-    if (!allUsers.length) return "暂无数据";
-    let users = [];
-    if (usernameDbExists) {
-      const channelIdentifier = getChannelIdentifier(session.platform, session.channelId);
-      const channelUsers = [];
-      for (const user of allUsers) {
-        const displayInfo = await getUserDisplayInfo(ctx, user.name, channelIdentifier);
-        if (displayInfo.displayName !== user.name) {
-          channelUsers.push({
-            ...user,
-            displayName: displayInfo.displayName,
-            username: displayInfo.username,
-            nickname: displayInfo.nickname
-          });
-        }
-      }
-      users = channelUsers.slice(0, ctx.config.limit);
-      if (!users.length) return "当前频道暂无数据";
-    } else {
-      users = allUsers.slice(0, ctx.config.limit).map((user) => ({
-        ...user,
-        displayName: user.name
-      }));
-    }
+    return [header, rankings, endDivider].join("\n");
+  }
+  __name(renderExpText, "renderExpText");
+  function renderSignText(users) {
+    const levelConfig = getLevelConfig();
     const divider = "┏" + "—".repeat(ctx.config.borderwidth) + "┓";
     const midDivider = "┣" + "—".repeat(ctx.config.borderwidth) + "┫";
     const endDivider = "┗" + "—".repeat(ctx.config.borderwidth) + "┛";
     const header = [
       divider,
-      `┃  ${users.length ? "🏆" : "�"} 累计签到排行榜 TOP.${ctx.config.limit} `,
+      `┃  ${users.length ? "🏆" : "📊"} 累计签到排行榜 TOP.${ctx.config.limit} `,
       midDivider
     ].join("\n");
     const rankings = users.map((user, index) => {
@@ -292,12 +353,29 @@ function apply(ctx) {
       }
       return rankText.join("\n");
     }).join("\n\n");
-    const output = [
-      header,
-      rankings,
-      endDivider
-    ].join("\n");
-    return output;
+    return [header, rankings, endDivider].join("\n");
+  }
+  __name(renderSignText, "renderSignText");
+  ctx.command(ctx.config.expCommand).action(async ({ session }) => {
+    const users = await getRankedUsers(session, "exp");
+    if (users === null) return "暂无数据";
+    if (users.length === 0) return "当前频道暂无数据";
+    if (canUseImageMode()) {
+      const totalCount = (await ctx.database.get("jrys", {})).length;
+      const img = await renderRankImage("exp", users, totalCount);
+      if (img) return img;
+    }
+    return renderExpText(users);
+  });
+  ctx.command(ctx.config.signCommand).action(async ({ session }) => {
+    const users = await getRankedUsers(session, "signCount");
+    if (users === null) return "暂无数据";
+    if (users.length === 0) return "当前频道暂无数据";
+    if (canUseImageMode()) {
+      const img = await renderRankImage("sign", users, (await ctx.database.get("jrys", {})).length);
+      if (img) return img;
+    }
+    return renderSignText(users);
   });
 }
 __name(apply, "apply");
@@ -305,5 +383,6 @@ __name(apply, "apply");
 0 && (module.exports = {
   Config,
   apply,
+  inject,
   name
 });
