@@ -129,17 +129,23 @@ __name(getUserDisplayInfo, "getUserDisplayInfo");
 var name = "jrys-fix-ranks";
 var inject = {
   required: ["database"],
+  // 必须有数据库服务以读取签到数据
   optional: ["puppeteer"]
+  // 可选：puppeteer 用于图片渲染，缺少时降级为文本模式
 };
 var Config = import_koishi.Schema.object({
+  // 基础设置
   limit: import_koishi.Schema.number().description("排行榜显示的最大条目数").default(10).min(1).max(100),
   expCommand: import_koishi.Schema.string().description("经验排行榜命令").default("jrysranks"),
   signCommand: import_koishi.Schema.string().description("签到天数排行榜命令").default("jrysranksign"),
+  // 显示模式
   imageMode: import_koishi.Schema.boolean().description("是否使用图片模式渲染排行榜（需要 puppeteer 服务）").default(true),
   next_ExpDisplay: import_koishi.Schema.boolean().description("是否在排行榜中显示升级所需经验").default(true),
   pre_next_LevelDisplay: import_koishi.Schema.boolean().description("是否在排行榜中显示前后等级信息").default(true),
   borderwidth: import_koishi.Schema.number().description("边框宽度（一般最佳宽度为14）").default(14),
+  // 等级配置同步
   syncLevelSet: import_koishi.Schema.boolean().description("自动从 jrys-fix 插件同步等级配置（启用后将忽略下方 levelSet）").default(true),
+  // 手动等级配置
   levelSet: import_koishi.Schema.array(import_koishi.Schema.object({
     level: import_koishi.Schema.number().description("等级"),
     levelExp: import_koishi.Schema.number().description("等级最低经验"),
@@ -224,10 +230,16 @@ function apply(ctx) {
       let template = await import_fs.promises.readFile(templatePath, "utf-8");
       const data = {
         type,
+        // 标识排行榜类型
         limit: ctx.config.limit,
+        // 显示的最大条目数
         channelName: "当前频道",
+        // 频道名称（当前硬编码）
         totalUsers,
+        // 用户总数
         updateTime: (/* @__PURE__ */ new Date()).toLocaleString("zh-CN"),
+        // 更新时间戳
+        // 转换用户数据格式，为模板提供所有必要的展示字段
         users: users.map((user) => {
           const levelData = buildUserLevelData(user);
           return {

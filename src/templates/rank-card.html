@@ -1,439 +1,480 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg-color: #0c0f15;
+        --card-bg: #161b22;
+        --item-bg: #1f242e;
+        --text-primary: #f0f3f5;
+        --text-secondary: #8b949e;
+        --border-color: #30363d;
+        --accent-color: #58a6ff;
 
-<head>
-  <meta charset="utf-8">
-  <style>
-    :root {
-      --bg-color: #0c0f15;
-      --card-bg: #161b22;
-      --item-bg: #1f242e;
-      --text-primary: #f0f3f5;
-      --text-secondary: #8b949e;
-      --border-color: #30363d;
-      --accent-color: #58a6ff;
+        /* medal colors */
+        --gold: #fbbf24;
+        --gold-bg: rgba(251, 191, 36, 0.12);
+        --silver: #94a3b8;
+        --silver-bg: rgba(148, 163, 184, 0.1);
+        --bronze: #d97706;
+        --bronze-bg: rgba(217, 119, 6, 0.1);
+      }
 
-      /* medal colors */
-      --gold: #fbbf24;
-      --gold-bg: rgba(251, 191, 36, 0.12);
-      --silver: #94a3b8;
-      --silver-bg: rgba(148, 163, 184, 0.10);
-      --bronze: #d97706;
-      --bronze-bg: rgba(217, 119, 6, 0.10);
-    }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        padding: 48px;
+        font-family:
+          "Roboto Mono",
+          "Trebuchet MS",
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "SF Pro Display",
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        background-color: var(--bg-color);
+        width: 640px;
+        color: var(--text-primary);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
 
-    body {
-      padding: 48px;
-      font-family: 'Roboto Mono', 'Trebuchet MS', 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-      background-color: var(--bg-color);
-      width: 640px;
-      color: var(--text-primary);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
+      .card {
+        background-color: var(--card-bg);
+        width: 100%;
+        padding: 32px 36px;
+        border-radius: 16px;
+        box-shadow:
+          0 32px 64px rgba(0, 0, 0, 0.6),
+          0 0 0 1px var(--border-color);
+        position: relative;
+      }
 
-    .card {
-      background-color: var(--card-bg);
-      width: 100%;
-      padding: 32px 36px;
-      border-radius: 16px;
-      box-shadow: 0 32px 64px rgba(0,0,0,0.6), 0 0 0 1px var(--border-color);
-      position: relative;
-    }
+      /* Header */
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 28px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border-color);
+      }
 
-    /* Header */
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 28px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border-color);
-    }
+      .header-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+        box-shadow: 0 8px 16px rgba(88, 166, 255, 0.2);
+      }
 
-    .header-icon {
-      width: 52px;
-      height: 52px;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 26px;
-      box-shadow: 0 8px 16px rgba(88, 166, 255, 0.2);
-    }
+      .header-icon.exp {
+        background: linear-gradient(135deg, #58a6ff, #2563eb);
+      }
 
-    .header-icon.exp {
-      background: linear-gradient(135deg, #58a6ff, #2563eb);
-    }
+      .header-icon.sign {
+        background: linear-gradient(135deg, #a78bfa, #7c3aed);
+      }
 
-    .header-icon.sign {
-      background: linear-gradient(135deg, #a78bfa, #7c3aed);
-    }
+      .header-info {
+        flex: 1;
+      }
 
-    .header-info {
-      flex: 1;
-    }
+      .header-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: -0.3px;
+      }
 
-    .header-title {
-      font-size: 22px;
-      font-weight: 700;
-      color: #ffffff;
-      letter-spacing: -0.3px;
-    }
+      .header-sub {
+        font-size: 14px;
+        color: var(--text-secondary);
+        font-weight: 500;
+        margin-top: 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
 
-    .header-sub {
-      font-size: 13px;
-      color: var(--text-secondary);
-      font-weight: 500;
-      margin-top: 4px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+      .header-sub::before {
+        content: "";
+        display: block;
+        width: 6px;
+        height: 6px;
+        background-color: #22c55e;
+        border-radius: 50%;
+        box-shadow: 0 0 8px #22c55e;
+      }
 
-    .header-sub::before {
-      content: '';
-      display: block;
-      width: 6px;
-      height: 6px;
-      background-color: #22c55e;
-      border-radius: 50%;
-      box-shadow: 0 0 8px #22c55e;
-    }
+      /* Rank List */
+      .rank-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
 
-    /* Rank List */
-    .rank-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+      .rank-item {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 16px;
+        background: var(--item-bg);
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        transition: background 0.2s;
+      }
 
-    .rank-item {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 14px 16px;
-      background: var(--item-bg);
-      border-radius: 12px;
-      border: 1px solid var(--border-color);
-      transition: background 0.2s;
-    }
+      .rank-item.top-1 {
+        background: var(--gold-bg);
+        border-color: rgba(255, 199, 57, 0.25);
+      }
 
-    .rank-item.top-1 {
-      background: var(--gold-bg);
-      border-color: rgba(251, 191, 36, 0.25);
-    }
+      .rank-item.top-2 {
+        background: var(--silver-bg);
+        border-color: rgba(219, 232, 250, 0.3);
+      }
 
-    .rank-item.top-2 {
-      background: var(--silver-bg);
-      border-color: rgba(148, 163, 184, 0.2);
-    }
+      .rank-item.top-3 {
+        background: var(--bronze-bg);
+        border-color: rgba(125, 74, 15, 0.05);
+      }
 
-    .rank-item.top-3 {
-      background: var(--bronze-bg);
-      border-color: rgba(217, 119, 6, 0.2);
-    }
+      /* Position badge */
+      .rank-pos {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 19px;
+        font-weight: 700;
+        flex-shrink: 0;
+        font-family: "Roboto Mono", monospace;
+      }
 
-    /* Position badge */
-    .rank-pos {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      font-weight: 700;
-      flex-shrink: 0;
-      font-family: 'Roboto Mono', monospace;
-    }
+      .rank-pos.top-1 {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        color: #1a1a1a;
+        box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+      }
 
-    .rank-pos.top-1 {
-      background: linear-gradient(135deg, #fbbf24, #f59e0b);
-      color: #1a1a1a;
-      box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
-    }
+      .rank-pos.top-2 {
+        background: linear-gradient(135deg, #dfe9f4, #aec4e2);
+        color: #1a1a1a;
+        box-shadow: 0 4px 12px rgba(148, 163, 184, 0.3);
+      }
 
-    .rank-pos.top-2 {
-      background: linear-gradient(135deg, #cbd5e1, #94a3b8);
-      color: #1a1a1a;
-      box-shadow: 0 4px 12px rgba(148, 163, 184, 0.3);
-    }
+      .rank-pos.top-3 {
+        background: linear-gradient(135deg, #dca10b, #9b5302);
+        color: #1a1a1a;
+        box-shadow: 0 4px 12px rgba(217, 119, 6, 0.3);
+      }
 
-    .rank-pos.top-3 {
-      background: linear-gradient(135deg, #fbbf24, #d97706);
-      color: #1a1a1a;
-      box-shadow: 0 4px 12px rgba(217, 119, 6, 0.3);
-    }
+      .rank-pos.normal {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text-secondary);
+      }
 
-    .rank-pos.normal {
-      background: rgba(255,255,255,0.06);
-      color: var(--text-secondary);
-    }
+      /* User info */
+      .rank-user {
+        flex: 1;
+        min-width: 0;
+      }
 
-    /* User info */
-    .rank-user {
-      flex: 1;
-      min-width: 0;
-    }
+      .rank-name {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
-    .rank-name {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+      .rank-sub {
+        font-size: 10px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
-    .rank-sub {
-      font-size: 12px;
-      color: var(--text-secondary);
-      margin-top: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+      /* Value */
+      .rank-value {
+        text-align: right;
+        flex-shrink: 0;
+      }
 
-    /* Value */
-    .rank-value {
-      text-align: right;
-      flex-shrink: 0;
-    }
+      .rank-value-main {
+        font-size: 21px;
+        font-weight: 700;
+        color: var(--text-primary);
+        font-family: "Roboto Mono", monospace;
+        letter-spacing: -0.5px;
+      }
 
-    .rank-value-main {
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--text-primary);
-      font-family: 'Roboto Mono', monospace;
-      letter-spacing: -0.5px;
-    }
+      .rank-value-label {
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+        text-align: right;
+      }
 
-    .rank-value-label {
-      font-size: 11px;
-      color: var(--text-secondary);
-      margin-top: 2px;
-      text-align: right;
-    }
+      /* Level badge */
+      .level-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-left: 6px;
+        vertical-align: middle;
+      }
 
-    /* Level badge */
-    .level-badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 600;
-      margin-left: 6px;
-      vertical-align: middle;
-    }
+      /* Progress bar */
+      .rank-progress {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
+      }
 
-    /* Progress bar */
-    .rank-progress {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 4px;
-    }
+      .progress-bar {
+        flex: 1;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 2px;
+        overflow: hidden;
+      }
 
-    .progress-bar {
-      flex: 1;
-      height: 4px;
-      background: rgba(255,255,255,0.08);
-      border-radius: 2px;
-      overflow: hidden;
-    }
+      .progress-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width 0.3s;
+      }
 
-    .progress-fill {
-      height: 100%;
-      border-radius: 2px;
-      transition: width 0.3s;
-    }
+      .progress-text {
+        font-size: 11px;
+        color: var(--text-secondary);
+        font-family: "Roboto Mono", monospace;
+        white-space: nowrap;
+      }
 
-    .progress-text {
-      font-size: 10px;
-      color: var(--text-secondary);
-      font-family: 'Roboto Mono', monospace;
-      white-space: nowrap;
-    }
+      /* Footer */
+      .footer {
+        margin-top: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 16px;
+        border-top: 1px solid var(--border-color);
+      }
 
-    /* Footer */
-    .footer {
-      margin-top: 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-top: 16px;
-      border-top: 1px solid var(--border-color);
-    }
+      .footer-stat {
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
 
-    .footer-stat {
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
+      .footer-stat b {
+        color: var(--text-primary);
+        font-family: "Roboto Mono", monospace;
+      }
 
-    .footer-stat b {
-      color: var(--text-primary);
-      font-family: 'Roboto Mono', monospace;
-    }
+      .footer-time {
+        font-size: 11px;
+        color: var(--text-secondary);
+        opacity: 0.7;
+        font-family: "Roboto Mono", monospace;
+      }
+    </style>
+  </head>
 
-    .footer-time {
-      font-size: 11px;
-      color: var(--text-secondary);
-      opacity: 0.7;
-      font-family: 'Roboto Mono', monospace;
-    }
-  </style>
-</head>
+  <body>
+    <div class="card">
+      <div class="header">
+        <div class="header-icon" id="header-icon"></div>
+        <div class="header-info">
+          <div class="header-title" id="header-title"></div>
+          <div class="header-sub" id="header-sub"></div>
+        </div>
+      </div>
 
-<body>
-  <div class="card">
-    <div class="header">
-      <div class="header-icon" id="header-icon"></div>
-      <div class="header-info">
-        <div class="header-title" id="header-title"></div>
-        <div class="header-sub" id="header-sub"></div>
+      <div class="rank-list" id="rank-list"></div>
+
+      <div class="footer">
+        <div class="footer-stat" id="footer-stat"></div>
+        <div class="footer-time" id="footer-time"></div>
       </div>
     </div>
 
-    <div class="rank-list" id="rank-list"></div>
+    <script type="application/json" id="data-source">
+      {{DATA}}
+    </script>
 
-    <div class="footer">
-      <div class="footer-stat" id="footer-stat"></div>
-      <div class="footer-time" id="footer-time"></div>
-    </div>
-  </div>
+    <script>
+      const DATA = JSON.parse(
+        document.getElementById("data-source").textContent,
+      );
 
-  <script type="application/json" id="data-source">
-{{DATA}}
-  </script>
+      const isExp = DATA.type === "exp";
 
-  <script>
-    const DATA = JSON.parse(document.getElementById('data-source').textContent);
+      // Header
+      const headerIcon = document.getElementById("header-icon");
+      headerIcon.className = `header-icon ${isExp ? "exp" : "sign"}`;
+      headerIcon.textContent = isExp ? "👑" : "📅";
 
-    const isExp = DATA.type === 'exp';
+      document.getElementById("header-title").textContent = isExp
+        ? `签到经验排行榜 TOP ${DATA.limit}`
+        : `累计签到排行榜 TOP ${DATA.limit}`;
 
-    // Header
-    const headerIcon = document.getElementById('header-icon');
-    headerIcon.className = `header-icon ${isExp ? 'exp' : 'sign'}`;
-    headerIcon.textContent = isExp ? '⚡' : '📅';
+      document.getElementById("header-sub").textContent =
+        DATA.channelName || "当前频道";
 
-    document.getElementById('header-title').textContent =
-      isExp ? `赛季经验排行榜 TOP ${DATA.limit}` : `累计签到排行榜 TOP ${DATA.limit}`;
+      // Rank list
+      const rankList = document.getElementById("rank-list");
 
-    document.getElementById('header-sub').textContent = DATA.channelName || '当前频道';
+      DATA.users.forEach((user, i) => {
+        const rank = i + 1;
+        const topClass = rank <= 3 ? `top-${rank}` : "";
 
-    // Rank list
-    const rankList = document.getElementById('rank-list');
+        const item = document.createElement("div");
+        item.className = `rank-item ${topClass}`;
 
-    DATA.users.forEach((user, i) => {
-      const rank = i + 1;
-      const topClass = rank <= 3 ? `top-${rank}` : '';
+        // Position badge
+        const posDiv = document.createElement("div");
+        posDiv.className = `rank-pos ${topClass || "normal"}`;
+        posDiv.textContent = rank;
+        item.appendChild(posDiv);
 
-      const item = document.createElement('div');
-      item.className = `rank-item ${topClass}`;
+        // User info
+        const userDiv = document.createElement("div");
+        userDiv.className = "rank-user";
 
-      // Position badge
-      const posDiv = document.createElement('div');
-      posDiv.className = `rank-pos ${topClass || 'normal'}`;
-      posDiv.textContent = rank;
-      item.appendChild(posDiv);
+        // Name line with level badge
+        const nameDiv = document.createElement("div");
+        nameDiv.className = "rank-name";
 
-      // User info
-      const userDiv = document.createElement('div');
-      userDiv.className = 'rank-user';
+        let nameText = user.displayName;
+        if (
+          user.nickname &&
+          user.username &&
+          user.displayName === user.nickname
+        ) {
+          nameText += ` (${user.username})`;
+        } else if (user.username && user.displayName !== user.originalId) {
+          nameText += ` (${user.originalId})`;
+        }
+        nameDiv.textContent = nameText;
+        userDiv.appendChild(nameDiv);
 
-      // Name line with level badge
-      const nameDiv = document.createElement('div');
-      nameDiv.className = 'rank-name';
+        // Sub info: level progression with current level colored
+        if (user.levelName) {
+          const subDiv = document.createElement("div");
+          subDiv.className = "rank-sub";
+          const color = user.levelColor || "var(--accent-color)";
+          if (user.levelProgression) {
+            const marker = `「${user.levelName}」`;
+            const parts = user.levelProgression.split(marker);
+            if (parts.length === 2) {
+              subDiv.appendChild(document.createTextNode(parts[0]));
+              const span = document.createElement("span");
+              span.textContent = marker;
+              span.style.color = color;
+              span.style.fontWeight = "700";
+              subDiv.appendChild(span);
+              subDiv.appendChild(document.createTextNode(parts[1]));
+            } else {
+              subDiv.textContent = user.levelProgression;
+            }
+          } else {
+            const span = document.createElement("span");
+            span.textContent = `「${user.levelName}」`;
+            span.style.color = color;
+            span.style.fontWeight = "700";
+            subDiv.appendChild(span);
+          }
+          userDiv.appendChild(subDiv);
+        }
 
-      let nameText = user.displayName;
-      if (user.nickname && user.username && user.displayName === user.nickname) {
-        nameText += ` (${user.username})`;
-      } else if (user.username && user.displayName !== user.originalId) {
-        nameText += ` (${user.originalId})`;
-      }
-      nameDiv.textContent = nameText;
+        // Progress bar for exp type
+        if (
+          isExp &&
+          user.nextLevelExp !== null &&
+          user.nextLevelExp !== undefined
+        ) {
+          const progressDiv = document.createElement("div");
+          progressDiv.className = "rank-progress";
 
-      // Level badge
-      if (user.levelName) {
-        const badge = document.createElement('span');
-        badge.className = 'level-badge';
-        badge.style.background = user.levelColor ? `${user.levelColor}20` : 'rgba(255,255,255,0.1)';
-        badge.style.color = user.levelColor || '#8b949e';
-        badge.textContent = user.levelName;
-        nameDiv.appendChild(badge);
-      }
+          const bar = document.createElement("div");
+          bar.className = "progress-bar";
 
-      userDiv.appendChild(nameDiv);
+          const fill = document.createElement("div");
+          fill.className = "progress-fill";
 
-      // Sub info (level progression)
-      if (user.levelProgression) {
-        const subDiv = document.createElement('div');
-        subDiv.className = 'rank-sub';
-        subDiv.textContent = user.levelProgression;
-        userDiv.appendChild(subDiv);
-      }
+          const currentExp = user.value;
+          const baseLevelExp = user.currentLevelExp || 0;
+          const nextExp = user.nextLevelExp;
+          const progress =
+            nextExp > baseLevelExp
+              ? Math.min(
+                  ((currentExp - baseLevelExp) / (nextExp - baseLevelExp)) *
+                    100,
+                  100,
+                )
+              : 100;
 
-      // Progress bar for exp type
-      if (isExp && user.nextLevelExp !== null && user.nextLevelExp !== undefined) {
-        const progressDiv = document.createElement('div');
-        progressDiv.className = 'rank-progress';
+          fill.style.width = progress.toFixed(1) + "%";
+          fill.style.background = user.levelColor || "var(--accent-color)";
+          bar.appendChild(fill);
+          progressDiv.appendChild(bar);
 
-        const bar = document.createElement('div');
-        bar.className = 'progress-bar';
+          const pText = document.createElement("div");
+          pText.className = "progress-text";
+          pText.textContent =
+            progress >= 100 ? "MAX" : `${currentExp}/${nextExp}`;
+          progressDiv.appendChild(pText);
 
-        const fill = document.createElement('div');
-        fill.className = 'progress-fill';
+          userDiv.appendChild(progressDiv);
+        }
 
-        const currentExp = user.value;
-        const baseLevelExp = user.currentLevelExp || 0;
-        const nextExp = user.nextLevelExp;
-        const progress = nextExp > baseLevelExp
-          ? Math.min(((currentExp - baseLevelExp) / (nextExp - baseLevelExp)) * 100, 100)
-          : 100;
+        item.appendChild(userDiv);
 
-        fill.style.width = progress.toFixed(1) + '%';
-        fill.style.background = user.levelColor || 'var(--accent-color)';
-        bar.appendChild(fill);
-        progressDiv.appendChild(bar);
+        // Value
+        const valueDiv = document.createElement("div");
+        valueDiv.className = "rank-value";
 
-        const pText = document.createElement('div');
-        pText.className = 'progress-text';
-        pText.textContent = progress >= 100 ? 'MAX' : `${currentExp}/${nextExp}`;
-        progressDiv.appendChild(pText);
+        const mainVal = document.createElement("div");
+        mainVal.className = "rank-value-main";
+        mainVal.textContent = Number(user.value).toLocaleString();
+        valueDiv.appendChild(mainVal);
 
-        userDiv.appendChild(progressDiv);
-      }
+        const labelVal = document.createElement("div");
+        labelVal.className = "rank-value-label";
+        labelVal.textContent = isExp ? "EXP" : "天";
+        valueDiv.appendChild(labelVal);
 
-      item.appendChild(userDiv);
+        item.appendChild(valueDiv);
+        rankList.appendChild(item);
+      });
 
-      // Value
-      const valueDiv = document.createElement('div');
-      valueDiv.className = 'rank-value';
-
-      const mainVal = document.createElement('div');
-      mainVal.className = 'rank-value-main';
-      mainVal.textContent = Number(user.value).toLocaleString();
-      valueDiv.appendChild(mainVal);
-
-      const labelVal = document.createElement('div');
-      labelVal.className = 'rank-value-label';
-      labelVal.textContent = isExp ? 'EXP' : '天';
-      valueDiv.appendChild(labelVal);
-
-      item.appendChild(valueDiv);
-      rankList.appendChild(item);
-    });
-
-    // Footer
-    document.getElementById('footer-stat').innerHTML =
-      `共 <b>${DATA.totalUsers}</b> 位用户参与`;
-    document.getElementById('footer-time').textContent = DATA.updateTime;
-  </script>
-</body>
-
+      // Footer
+      document.getElementById("footer-stat").innerHTML =
+        `共 <b>${DATA.totalUsers}</b> 位用户参与`;
+      document.getElementById("footer-time").textContent = DATA.updateTime;
+    </script>
+  </body>
 </html>

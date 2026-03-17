@@ -21,7 +21,7 @@
   <a href="https://gitcode.com/BYWled/koishi-plugin-jrys-fix-ranks">GitCode</a>
 </p>
 
-> 版本：**2.0.0**
+> 版本：**2.1.0**
 
 ## ✨ 特性
 
@@ -135,11 +135,16 @@ A：确保 `puppeteer` 服务已正确安装并启动。如果仍然失败，插
 
 ## 📝 更新日志
 
+- **2.1.0**：
+  - docs：完善代码注释，添加元素和渲染逻辑。
+  - style：优化 html 模板结构，使其页面布局更简洁、易读、美观。
+
 - **2.0.0**：
   - feat：新增 `syncLevelSet` 配置选项，支持自动从 jrys-fix 插件同步等级配置。
   - refactor：段位配置改为插件自身的配置项，不再依赖读取其他插件的 koishi.yml 配置，提升健壮性。
   - fix：修复 HTML 模板在某些环境下的路径引用问题。
   - docs：重写自述文件。
+
 - **1.2.2**：
   - href：更新插件相关链接和信息。
 
