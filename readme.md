@@ -21,7 +21,7 @@
   <a href="https://gitcode.com/BYWled/koishi-plugin-jrys-fix-ranks">GitCode</a>
 </p>
 
-> 版本：**2.1.0**
+> 版本：**2.1.2**
 
 ## ✨ 特性
 
@@ -134,6 +134,9 @@ A：插件会根据当前频道筛选用户。如果启用了 `username` 数据�
 A：确保 `puppeteer` 服务已正确安装并启动。如果仍然失败，插件会自动回退到文本模式输出。你也可以在配置中将 `imageMode` 设为 `false` 来直接使用文本模式。
 
 ## 📝 更新日志
+
+- **2.1.2**：
+  - fix：修复了潜在的报错。
 
 - **2.1.1**：
   - fix：修复了潜在的报错。

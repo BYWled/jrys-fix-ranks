@@ -2,7 +2,6 @@ import { Context, Schema, h } from 'koishi'
 import { resolve } from 'path'
 import { promises as fsAsync } from 'fs'
 import type { } from 'koishi-plugin-puppeteer'
-import * as jrysFix from 'koishi-plugin-jrys-fix'
 
 /**
  * ========================================
@@ -353,7 +352,7 @@ export function apply(ctx: Context) {
   function getLevelConfig(): LevelInfo[] {
     if (ctx.config.syncLevelSet) {
       // 从 Koishi 注册表中获取 jrys-fix 插件的实例和配置
-      const scope = ctx.registry.get(jrysFix)
+      const scope = ctx.registry.get('jrys-fix' as any)
       const synced: LevelInfo[] = scope?.config?.levelSet
 
       // 如果成功读到配置，直接使用（不需要日志，这是正常流程）
@@ -737,7 +736,8 @@ export function apply(ctx: Context) {
    * 3. 降级文本模式输出
    */
   ctx.command(ctx.config.expCommand)
-    .action(async ({ session }) => {
+    .action(async (argv, ..._args) => {
+      const { session } = argv
       // 获取排行用户列表，按经验值排序
       const users = await getRankedUsers(session, 'exp')
 
@@ -766,7 +766,8 @@ export function apply(ctx: Context) {
    * 流程同 jrysranks，但按签到天数排序
    */
   ctx.command(ctx.config.signCommand)
-    .action(async ({ session }) => {
+    .action(async (argv, ..._args) => {
+      const { session } = argv
       // 获取排行用户列表，按签到天数排序
       const users = await getRankedUsers(session, 'signCount')
 

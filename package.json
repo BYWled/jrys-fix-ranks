@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-jrys-fix-ranks",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "main": "lib/index.js",
   "files": [
     "lib",
@@ -45,8 +45,11 @@
     "koishi-plugin-jrys-fix": "1.0.0",
     "koishi-plugin-puppeteer": "*"
   },
-  "dependencies": {
+  "devDependencies": {
     "koishi": "^4.18.0",
-    "koishi-plugin-jrys-fix": "1.0.0"
+    "koishi-plugin-jrys-fix": "1.0.0",
+    "koishi-plugin-puppeteer": "*",
+    "typescript": "^5.0.0",
+    "@types/node": "*"
   }
 }
