@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-jrys-fix-ranks",
-  "version": "2.1.0",
-  "main": "lib/index.ts",
+  "version": "2.1.1",
+  "main": "lib/index.js",
   "files": [
     "lib",
     "dist"
